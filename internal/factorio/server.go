@@ -3,6 +3,7 @@ package factorio
 import (
 	"context"
 	"errors"
+	"factorio/internal/config"
 	"fmt"
 	"io"
 	"os"
@@ -32,7 +33,7 @@ type FactorioMessage struct {
 	Reply chan<- error
 }
 
-func StartFactorioLoop(ctx context.Context, savePath string) (chan<- FactorioMessage, <-chan error) {
+func StartFactorioLoop(ctx context.Context, cfg config.FactorioConfig) (chan<- FactorioMessage, <-chan error) {
 	msgChan := make(chan FactorioMessage, 1)
 	fatalChan := make(chan error, 1)
 
@@ -53,11 +54,30 @@ func StartFactorioLoop(ctx context.Context, savePath string) (chan<- FactorioMes
 				case FactorioStart:
 					if cmd != nil {
 						logger.Warning("An attempt to start the Factorio server was received while it was already running.")
-						msg.Reply <- errors.New("server is already running")
+						msg.Reply <- ErrServerAlreadyRunning
 						continue
 					}
 
-					c := exec.Command("/opt/factorio/bin/x64/factorio", "--start-server", savePath)
+					execPath := cfg.ExecutablePath
+					if execPath == "" {
+						execPath = "/opt/factorio/bin/x64/factorio"
+					}
+
+					args := []string{"--start-server", cfg.SavePath}
+					if cfg.ServerSettingsPath != "" {
+						args = append(args, "--server-settings", cfg.ServerSettingsPath)
+					}
+					if cfg.ServerAdminListPath != "" {
+						args = append(args, "--server-adminlist", cfg.ServerAdminListPath)
+					}
+					if cfg.ServerBanListPath != "" {
+						args = append(args, "--server-banlist", cfg.ServerBanListPath)
+					}
+					if cfg.ServerWhiteListPath != "" {
+						args = append(args, "--server-whitelist", cfg.ServerWhiteListPath)
+					}
+
+					c := exec.Command(execPath, args...)
 					c.Stdout = os.Stdout
 					c.Stderr = os.Stderr
 
@@ -92,8 +112,13 @@ func StartFactorioLoop(ctx context.Context, savePath string) (chan<- FactorioMes
 						continue
 					}
 
+					timeout := cfg.ShutdownTimeout
+					if timeout <= 0 {
+						timeout = 1 * time.Minute
+					}
+
 					// Graceful shutdown helper handles wait & force-kill if needed
-					err := shutDownServer(ctx, cmd, logger, stdin, doneChan)
+					err := shutDownServer(ctx, cmd, logger, stdin, doneChan, timeout)
 
 					// Reset state so server can be started again
 					cmd = nil
@@ -117,7 +142,11 @@ func StartFactorioLoop(ctx context.Context, savePath string) (chan<- FactorioMes
 			case <-ctx.Done():
 				logger.Warning("Received cancellation signal. Shutting down Factorio actor loop...")
 				if cmd != nil {
-					_ = shutDownServer(ctx, cmd, logger, stdin, doneChan)
+					timeout := cfg.ShutdownTimeout
+					if timeout <= 0 {
+						timeout = 1 * time.Minute
+					}
+					_ = shutDownServer(ctx, cmd, logger, stdin, doneChan, timeout)
 				}
 				return
 			}
@@ -127,7 +156,7 @@ func StartFactorioLoop(ctx context.Context, savePath string) (chan<- FactorioMes
 	return msgChan, fatalChan
 }
 
-func shutDownServer(ctx context.Context, cmd *exec.Cmd, logger grove.ILogger, stdin io.WriteCloser, done <-chan error) error {
+func shutDownServer(ctx context.Context, cmd *exec.Cmd, logger grove.ILogger, stdin io.WriteCloser, done <-chan error, timeout time.Duration) error {
 	logger.Info("Sending /quit command to Factorio server...")
 
 	if _, err := io.WriteString(stdin, "/quit\n"); err != nil {
@@ -136,7 +165,7 @@ func shutDownServer(ctx context.Context, cmd *exec.Cmd, logger grove.ILogger, st
 		return fmt.Errorf("%w: failed to write quit signal: %v", ErrFactorioServerError, err)
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(ctx, 1*time.Minute)
+	shutdownCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	select {
@@ -145,7 +174,7 @@ func shutDownServer(ctx context.Context, cmd *exec.Cmd, logger grove.ILogger, st
 		return err
 
 	case <-shutdownCtx.Done():
-		logger.Error("Factorio server took longer than 1 minute to shut down. Force killing process...")
+		logger.Errorf("Factorio server took longer than %v to shut down. Force killing process...", timeout)
 		_ = cmd.Process.Kill()
 
 		// Drain the wait channel after force killing
@@ -153,3 +182,4 @@ func shutDownServer(ctx context.Context, cmd *exec.Cmd, logger grove.ILogger, st
 		return fmt.Errorf("%w: shutdown timed out and process was force killed", ErrFactorioServerError)
 	}
 }
+

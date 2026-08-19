@@ -3,18 +3,42 @@ package main
 import (
 	"context"
 	"errors"
+	"factorio/internal/config"
 	"factorio/internal/factorio"
+	"flag"
+	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/StevenAlexanderJohnson/grove"
 )
 
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	messageChan, fatalChan := factorio.StartFactorioLoop(ctx, "/factorio/data/saves/my-world.zip")
+	configPath := flag.String("config", "", "Path to YAML configuration file")
+	flag.Parse()
 
 	logger := grove.NewDefaultLogger("FactorioAPI")
+
+	cfg, err := config.LoadConfig(*configPath)
+	if err != nil {
+		logger.Errorf("failed to load configuration: %v", err)
+		os.Exit(1)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	updated, version, err := factorio.EnsureUpdated(ctx, cfg.Factorio, logger)
+	if err != nil {
+		logger.Errorf("failed to ensure factorio was up to date on startup: %w", err)
+		os.Exit(1)
+	}
+	if updated {
+		logger.Infof("updated factorio on startup, new version: %s", version)
+	} else {
+		logger.Infof("factorio was up to date on startup")
+	}
+	messageChan, fatalChan := factorio.StartFactorioLoop(ctx, cfg.Factorio)
 
 	go func() {
 		if err := <-fatalChan; err != nil {
@@ -66,14 +90,21 @@ func main() {
 		)).
 		WithRoute("POST /update", http.HandlerFunc(
 			func(w http.ResponseWriter, r *http.Request) {
-				responseChan := make(chan error)
-				messageChan <- factorio.FactorioMessage{
-					Type:  factorio.FactorioUpdate,
-					Reply: responseChan,
+				updated, version, err := factorio.EnsureUpdated(ctx, cfg.Factorio, logger)
+				if err != nil {
+					grove.WriteErrorToResponse(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				output := map[string]string{}
+				if updated {
+					output["message"] = fmt.Sprintf("factorio has been updated to version: %s", version)
+				} else {
+					output["message"] = "factorio was already up to date"
 				}
 
-				if err := <-responseChan; err != nil {
+				if err := grove.WriteJsonBodyToResponse(w, output); err != nil {
 					grove.WriteErrorToResponse(w, http.StatusInternalServerError, err.Error())
+
 				}
 			},
 		))

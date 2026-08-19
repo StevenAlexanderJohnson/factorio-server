@@ -1,0 +1,11 @@
+factorio:
+  executable_path: "/opt/factorio/bin/x64/factorio"
+  save_path: "/factorio/data/saves/my-world.zip"
+  # version_file_path: "/factorio/version.txt"
+  # server_settings_path: "/factorio/data/server-settings.json"
+  # server_adminlist_path: "/factorio/data/server-adminlist.json"
+  # server_banlist_path: "/factorio/data/server-banlist.json"
+  # server_whitelist_path: "/factorio/data/server-whitelist.json"
+  shutdown_timeout: 1m
+  # download_url: "https://factorio.com/get-download/stable/headless/linux64"
+
