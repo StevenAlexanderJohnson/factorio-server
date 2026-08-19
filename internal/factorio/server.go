@@ -8,10 +8,12 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
 
 	grove "github.com/StevenAlexanderJohnson/grove"
 )
+
 
 var (
 	ErrFactorioServerError  = errors.New("an error occurred with the Factorio server")
@@ -63,6 +65,12 @@ func StartFactorioLoop(ctx context.Context, cfg config.FactorioConfig) (chan<- F
 						execPath = "/opt/factorio/bin/x64/factorio"
 					}
 
+					if err := ensureSaveFile(ctx, execPath, cfg.SavePath, logger); err != nil {
+						logger.Errorf("Failed to ensure save file: %v", err)
+						msg.Reply <- fmt.Errorf("%w: failed to ensure save file: %v", ErrFactorioServerError, err)
+						continue
+					}
+
 					args := []string{"--start-server", cfg.SavePath}
 					if cfg.ServerSettingsPath != "" {
 						args = append(args, "--server-settings", cfg.ServerSettingsPath)
@@ -80,6 +88,7 @@ func StartFactorioLoop(ctx context.Context, cfg config.FactorioConfig) (chan<- F
 					c := exec.Command(execPath, args...)
 					c.Stdout = os.Stdout
 					c.Stderr = os.Stderr
+
 
 					pStdin, err := c.StdinPipe()
 					if err != nil {
@@ -182,4 +191,34 @@ func shutDownServer(ctx context.Context, cmd *exec.Cmd, logger grove.ILogger, st
 		return fmt.Errorf("%w: shutdown timed out and process was force killed", ErrFactorioServerError)
 	}
 }
+
+// ensureSaveFile checks if the specified save file exists, and runs `factorio --create` to generate one if missing.
+func ensureSaveFile(ctx context.Context, execPath string, savePath string, logger grove.ILogger) error {
+	if _, err := os.Stat(savePath); err == nil {
+		return nil
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("failed to check save file %q: %w", savePath, err)
+	}
+
+	logger.Infof("Save file %q not found. Creating a new world map...", savePath)
+
+	dir := filepath.Dir(savePath)
+	if dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("failed to create directory for save file %q: %w", dir, err)
+		}
+	}
+
+	cmd := exec.CommandContext(ctx, execPath, "--create", savePath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to create factorio map: %w", err)
+	}
+
+	logger.Infof("Factorio map created successfully at %q.", savePath)
+	return nil
+}
+
 

@@ -2,11 +2,9 @@ package main
 
 import (
 	"context"
-	"errors"
 	"factorio/internal/config"
 	"factorio/internal/factorio"
 	"flag"
-	"fmt"
 	"net/http"
 	"os"
 
@@ -30,7 +28,7 @@ func main() {
 
 	updated, version, err := factorio.EnsureUpdated(ctx, cfg.Factorio, logger)
 	if err != nil {
-		logger.Errorf("failed to ensure factorio was up to date on startup: %w", err)
+		logger.Errorf("failed to ensure factorio was up to date on startup: %v", err)
 		os.Exit(1)
 	}
 	if updated {
@@ -49,65 +47,10 @@ func main() {
 
 	scope := grove.
 		NewScope("main").
-		WithRoute("/healthz", http.HandlerFunc(
-			func(w http.ResponseWriter, r *http.Request) {
-				w.Write([]byte("healthy"))
-			},
-		)).
-		WithRoute("POST /start", http.HandlerFunc(
-			func(w http.ResponseWriter, r *http.Request) {
-				responseChan := make(chan error)
-				messageChan <- factorio.FactorioMessage{
-					Type:  factorio.FactorioStart,
-					Reply: responseChan,
-				}
-
-				if err := <-responseChan; err != nil {
-					if errors.Is(err, factorio.ErrServerAlreadyRunning) {
-						grove.WriteErrorToResponse(w, http.StatusBadRequest, "the factorio server is already running")
-						return
-					}
-					grove.WriteErrorToResponse(w, http.StatusInternalServerError, err.Error())
-				}
-			},
-		)).
-		WithRoute("POST /stop", http.HandlerFunc(
-			func(w http.ResponseWriter, r *http.Request) {
-				responseChan := make(chan error)
-				messageChan <- factorio.FactorioMessage{
-					Type:  factorio.FactorioStop,
-					Reply: responseChan,
-				}
-
-				if err := <-responseChan; err != nil {
-					if errors.Is(err, factorio.ErrServerAlreadyStopped) {
-						grove.WriteErrorToResponse(w, http.StatusBadRequest, "the factorio server is already stopped")
-						return
-					}
-					grove.WriteErrorToResponse(w, http.StatusInternalServerError, err.Error())
-				}
-			},
-		)).
-		WithRoute("POST /update", http.HandlerFunc(
-			func(w http.ResponseWriter, r *http.Request) {
-				updated, version, err := factorio.EnsureUpdated(ctx, cfg.Factorio, logger)
-				if err != nil {
-					grove.WriteErrorToResponse(w, http.StatusInternalServerError, err.Error())
-					return
-				}
-				output := map[string]string{}
-				if updated {
-					output["message"] = fmt.Sprintf("factorio has been updated to version: %s", version)
-				} else {
-					output["message"] = "factorio was already up to date"
-				}
-
-				if err := grove.WriteJsonBodyToResponse(w, output); err != nil {
-					grove.WriteErrorToResponse(w, http.StatusInternalServerError, err.Error())
-
-				}
-			},
-		))
+		WithRoute("/healthz", http.HandlerFunc(handleHealthz)).
+		WithRoute("POST /start", handleStart(messageChan)).
+		WithRoute("POST /stop", handleStop(messageChan)).
+		WithRoute("POST /update", handleUpdate(ctx, messageChan, cfg.Factorio, logger))
 
 	app := grove.NewApp("factorio").WithScope("/", scope)
 
@@ -115,3 +58,4 @@ func main() {
 		panic(err)
 	}
 }
+
