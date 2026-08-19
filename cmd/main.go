@@ -45,6 +45,18 @@ func main() {
 		}
 	}()
 
+	// The factorio loop doesn't start up the server automatically. I'm adding this so it doesn't require
+	// an initial start http request.
+	startReply := make(chan error)
+	messageChan <- factorio.FactorioMessage{
+		Type:  factorio.FactorioStart,
+		Reply: startReply,
+	}
+	if err := <-startReply; err != nil {
+		logger.Errorf("an error occurred in the initial startup of the factorio server: %v", err)
+		os.Exit(1)
+	}
+
 	scope := grove.
 		NewScope("main").
 		WithRoute("/healthz", http.HandlerFunc(handleHealthz)).
@@ -58,4 +70,3 @@ func main() {
 		panic(err)
 	}
 }
-
