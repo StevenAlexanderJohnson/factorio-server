@@ -67,6 +67,7 @@ func main() {
 	app := grove.NewApp("factorio").WithScope("/", scope)
 
 	if err := app.Run(); err != nil {
+		cancel()
 		panic(err)
 	}
 }
