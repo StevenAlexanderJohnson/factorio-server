@@ -9,6 +9,8 @@ import (
 	"flag"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/StevenAlexanderJohnson/grove"
 )
@@ -25,7 +27,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
 	updated, version, err := factorio.EnsureUpdated(ctx, cfg.Factorio, logger)
