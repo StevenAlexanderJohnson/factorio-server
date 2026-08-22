@@ -9,6 +9,8 @@ import (
 	"flag"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/StevenAlexanderJohnson/grove"
 )
@@ -25,7 +27,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
 	updated, version, err := factorio.EnsureUpdated(ctx, cfg.Factorio, logger)
@@ -39,21 +41,19 @@ func main() {
 		logger.Infof("factorio was up to date on startup")
 	}
 
-	srv := services.NewFactorioService(ctx, logger, cfg.Factorio)
-
+	factorioService, err := services.NewFactorioService(ctx, logger, cfg.Factorio)
+	if err != nil {
+		logger.Errorf("An error occurred while creating the factorio service: %w\n", err)
+		return
+	}
 	go func() {
-		if err := <-srv.FatalChan(); err != nil {
+		if err := <-factorioService.FatalChan(); err != nil {
 			logger.Errorf("an error occurred while running the factorio loop: %v", err)
 			cancel()
 		}
 	}()
 
-	// The factorio loop doesn't start up the server automatically. I'm adding this so it doesn't require
-	// an initial start http request.
-	if err := srv.StartServer(); err != nil {
-		logger.Errorf("an error occurred in the initial startup of the factorio server: %v", err)
-		os.Exit(1)
-	}
+	settingsService := services.NewSettingsService(cfg.Factorio)
 
 	scope := grove.
 		NewScope("main").
@@ -62,7 +62,8 @@ func main() {
 				w.Write([]byte("healthy"))
 			}),
 		).
-		WithController(controllers.NewFactorioController(srv))
+		WithController(controllers.NewFactorioController(factorioService)).
+		WithController(controllers.NewSettingsController(settingsService))
 
 	app := grove.NewApp("factorio").WithScope("/", scope)
 

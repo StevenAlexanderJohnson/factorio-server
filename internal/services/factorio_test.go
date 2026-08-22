@@ -16,13 +16,16 @@ func TestFactorioService_StoppedState(t *testing.T) {
 	logger := grove.NewDefaultLogger("TestServer")
 	cfg := config.FactorioConfig{}
 
-	srv := NewFactorioService(ctx, logger, cfg)
+	srv, err := NewFactorioService(ctx, logger, cfg)
+	if err != nil {
+		t.Fatalf("failed to create factorio service: %v", err)
+	}
 
 	if srv.IsRunning() {
 		t.Fatalf("expected server not to be running initially")
 	}
 
-	err := srv.StopServer()
+	err = srv.StopServer()
 	if !errors.Is(err, ErrServerAlreadyStopped) {
 		t.Fatalf("expected ErrServerAlreadyStopped when stopping a stopped server, got: %v", err)
 	}
