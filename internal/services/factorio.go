@@ -124,16 +124,27 @@ func (f *factorioManager) startFactorioLoop(cfg config.FactorioConfig) {
 
 				args := []string{"--start-server", cfg.SavePath}
 				if cfg.ServerSettingsPath != "" {
-					args = append(args, "--server-settings", cfg.ServerSettingsPath)
+					if _, err := os.Stat(cfg.ServerSettingsPath); err == nil {
+						args = append(args, "--server-settings", cfg.ServerSettingsPath)
+					}
 				}
 				if cfg.ServerAdminListPath != "" {
-					args = append(args, "--server-adminlist", cfg.ServerAdminListPath)
+					if _, err := os.Stat(cfg.ServerAdminListPath); err == nil {
+						args = append(args, "--server-adminlist", cfg.ServerAdminListPath)
+					}
 				}
 				if cfg.ServerBanListPath != "" {
-					args = append(args, "--server-banlist", cfg.ServerBanListPath)
+					if _, err := os.Stat(cfg.ServerBanListPath); err == nil {
+						args = append(args, "--server-banlist", cfg.ServerBanListPath)
+					}
 				}
-				if cfg.ServerWhiteListPath != "" {
-					args = append(args, "--server-whitelist", cfg.ServerWhiteListPath)
+				if cfg.UseServerWhitelist {
+					args = append(args, "--use-server-whitelist")
+					if cfg.ServerWhiteListPath != "" {
+						if _, err := os.Stat(cfg.ServerWhiteListPath); err == nil {
+							args = append(args, "--server-whitelist", cfg.ServerWhiteListPath)
+						}
+					}
 				}
 
 				c := exec.Command(execPath, args...)
@@ -295,7 +306,7 @@ type FactorioService struct {
 	fatalChan <-chan error
 }
 
-func NewFactorioService(ctx context.Context, logger grove.ILogger, cfg config.FactorioConfig) *FactorioService {
+func NewFactorioService(ctx context.Context, logger grove.ILogger, cfg config.FactorioConfig) (*FactorioService, error) {
 	msgChan := make(chan FactorioMessage, 1)
 	fatalChan := make(chan error, 1)
 
@@ -307,11 +318,22 @@ func NewFactorioService(ctx context.Context, logger grove.ILogger, cfg config.Fa
 	}
 	go factorioManager.startFactorioLoop(cfg)
 
+	if cfg.StartServerOnStartup {
+		reply := make(chan error, 1)
+		msgChan <- FactorioMessage{
+			Type:  FactorioStart,
+			Reply: reply,
+		}
+		if err := <-reply; err != nil {
+			return nil, err
+		}
+	}
+
 	return &FactorioService{
 		factorioManager: factorioManager,
 		msgChan:         msgChan,
 		fatalChan:       fatalChan,
-	}
+	}, nil
 }
 
 func (f *FactorioService) FatalChan() <-chan error {
