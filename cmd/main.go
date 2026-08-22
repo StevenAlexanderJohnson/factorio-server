@@ -57,7 +57,11 @@ func main() {
 
 	scope := grove.
 		NewScope("main").
-		WithRoute("/healthz", http.HandlerFunc(handleHealthz)).
+		WithRoute("/healthz", http.HandlerFunc(
+			func(w http.ResponseWriter, r *http.Request) {
+				w.Write([]byte("healthy"))
+			}),
+		).
 		WithController(controllers.NewFactorioController(srv))
 
 	app := grove.NewApp("factorio").WithScope("/", scope)
