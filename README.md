@@ -47,6 +47,19 @@ factorio:
   rcon_password: ""
 ```
 
+## Authentication
+
+In the configuration the `auth.api_key` value should be passed in the HTTP request authorization header. It is considered a bearer token. An example usage would be 
+
+```bash
+  curl -X GET "https://my-factorio-api.com" \
+     -H "Authorization: Bearer <YOUR_API_KEY>"
+```
+
+If there is no API key provided, i.e. it is excluded or an empty string in the yaml file, a new cryptographically strong random API key will be generated and written into the file.
+In order to then make HTTP request, you'll have to look in the mounted volume or the config.yaml file to see what it was set to.
+It will not print out to the console.
+
 ## Running with Docker
 
 ```bash
@@ -56,6 +69,11 @@ docker run -d \
   -v ./data:/factorio/data \
   factorio-api:latest
 ```
+
+All files that you should care about will be placed in into the `./data` volume. 
+By default files like `map-gen-settings.json` and `server-settings.json` will not be in there. 
+Once you send request to the settings endpoints listed below, the data will be written into the data folder. 
+If there is already a file with the matching name in the data folder, it will be overwritten, else it is created.
 
 ## API Endpoints
 
@@ -106,3 +124,4 @@ Some use cases that I use AI for as follows:
   * Brainstorming
   * Repetitive tasks
   * Configuration parsing
+  * Updating this README with progress and new endpoint documentation.
