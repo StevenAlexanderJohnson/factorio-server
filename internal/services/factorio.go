@@ -276,7 +276,7 @@ func (f *factorioManager) shutDownServer(done chan error, timeout time.Duration)
 		return fmt.Errorf("%w: failed to write quit signal: %v", ErrFactorioServerError, err)
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(f.ctx, timeout)
+	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(f.ctx), timeout)
 	defer cancel()
 
 	select {
