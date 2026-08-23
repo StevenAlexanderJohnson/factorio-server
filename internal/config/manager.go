@@ -111,3 +111,8 @@ func (c *ConfigManager) UpdateSavePath(path string) error {
 	c.cfg.Factorio.SavePath = path
 	return c.flushConfig()
 }
+
+func (c *ConfigManager) UpdateFactorioConfig(cfg FactorioConfig) error {
+	c.cfg.Factorio = cfg
+	return c.flushConfig()
+}

@@ -68,7 +68,8 @@ func main() {
 		).
 		WithController(controllers.NewFactorioController(logger, factorioService)).
 		WithController(controllers.NewSettingsController(logger, settingsService)).
-		WithController(controllers.NewCommandController(logger, commandService))
+		WithController(controllers.NewCommandController(logger, commandService)).
+		WithController(controllers.NewConfigController(logger, cfgManager))
 
 	app := grove.NewApp("factorio").WithScope("/", scope)
 
