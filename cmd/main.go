@@ -22,7 +22,7 @@ func main() {
 
 	logger := grove.NewDefaultLogger("FactorioAPI")
 
-	cfg, err := config.LoadConfig(*configPath)
+	cfgManager, err := config.NewConfigManager(*configPath)
 	if err != nil {
 		logger.Errorf("failed to load configuration: %v", err)
 		os.Exit(1)
@@ -31,7 +31,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	updated, version, err := factorio.EnsureUpdated(ctx, cfg.Factorio, logger)
+	updated, version, err := factorio.EnsureUpdated(ctx, cfgManager.GetConfig().Factorio, logger)
 	if err != nil {
 		logger.Errorf("failed to ensure factorio was up to date on startup: %v", err)
 		os.Exit(1)
@@ -42,7 +42,7 @@ func main() {
 		logger.Infof("factorio was up to date on startup")
 	}
 
-	factorioService, err := services.NewFactorioService(ctx, logger, cfg.Factorio)
+	factorioService, err := services.NewFactorioService(ctx, logger, cfgManager)
 	if err != nil {
 		logger.Errorf("An error occurred while creating the factorio service: %w\n", err)
 		return
@@ -54,13 +54,13 @@ func main() {
 		}
 	}()
 
-	settingsService := services.NewSettingsService(cfg.Factorio)
+	settingsService := services.NewSettingsService(cfgManager)
 
 	commandService := services.NewCommandService(factorioService)
 
 	scope := grove.
 		NewScope("main").
-		WithMiddleware(middleware.NewAuthMiddleware(cfg.Auth)).
+		WithMiddleware(middleware.NewAuthMiddleware(cfgManager)).
 		WithRoute("/healthz", http.HandlerFunc(
 			func(w http.ResponseWriter, r *http.Request) {
 				w.Write([]byte("healthy"))
@@ -68,7 +68,8 @@ func main() {
 		).
 		WithController(controllers.NewFactorioController(logger, factorioService)).
 		WithController(controllers.NewSettingsController(logger, settingsService)).
-		WithController(controllers.NewCommandController(logger, commandService))
+		WithController(controllers.NewCommandController(logger, commandService)).
+		WithController(controllers.NewConfigController(logger, cfgManager))
 
 	app := grove.NewApp("factorio").WithScope("/", scope)
 

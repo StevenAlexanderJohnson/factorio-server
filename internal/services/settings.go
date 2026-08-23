@@ -19,12 +19,12 @@ var (
 )
 
 type SettingsService struct {
-	cfg config.FactorioConfig
+	cfgManager *config.ConfigManager
 }
 
-func NewSettingsService(cfg config.FactorioConfig) SettingsService {
+func NewSettingsService(cfgManager *config.ConfigManager) SettingsService {
 	return SettingsService{
-		cfg: cfg,
+		cfgManager: cfgManager,
 	}
 }
 
@@ -85,31 +85,38 @@ func writeJSONSettings[T any](targetPath string, data T) error {
 }
 
 func (s *SettingsService) GetServerSettings() (models.ServerSettings, error) {
-	return readJSONSettings[models.ServerSettings](s.cfg.ServerSettingsPath, "/opt/factorio/data/server-settings.example.json")
+	cfg := s.cfgManager.GetConfig()
+	return readJSONSettings[models.ServerSettings](cfg.Factorio.ServerSettingsPath, "/opt/factorio/data/server-settings.example.json")
 }
 
 func (s *SettingsService) UpdateServerSettings(settings models.ServerSettings) error {
-	return writeJSONSettings(s.cfg.ServerSettingsPath, settings)
+	cfg := s.cfgManager.GetConfig()
+	return writeJSONSettings(cfg.Factorio.ServerSettingsPath, settings)
 }
 
 func (s *SettingsService) GetMapSettings() (models.MapSettings, error) {
-	return readJSONSettings[models.MapSettings](s.cfg.MapSettingsPath, "/opt/factorio/data/map-settings.example.json")
+	cfg := s.cfgManager.GetConfig()
+	return readJSONSettings[models.MapSettings](cfg.Factorio.MapSettingsPath, "/opt/factorio/data/map-settings.example.json")
 }
 
 func (s *SettingsService) UpdateMapSettings(settings models.MapSettings) error {
-	return writeJSONSettings(s.cfg.MapSettingsPath, settings)
+	cfg := s.cfgManager.GetConfig()
+	return writeJSONSettings(cfg.Factorio.MapSettingsPath, settings)
 }
 
 func (s *SettingsService) GetMapGenSettings() (models.MapGenSettings, error) {
-	return readJSONSettings[models.MapGenSettings](s.cfg.MapGenSettingsPath, "/opt/factorio/data/map-gen-settings.example.json")
+	cfg := s.cfgManager.GetConfig()
+	return readJSONSettings[models.MapGenSettings](cfg.Factorio.MapGenSettingsPath, "/opt/factorio/data/map-gen-settings.example.json")
 }
 
 func (s *SettingsService) UpdateMapGenSettings(settings models.MapGenSettings) error {
-	return writeJSONSettings(s.cfg.MapGenSettingsPath, settings)
+	cfg := s.cfgManager.GetConfig()
+	return writeJSONSettings(cfg.Factorio.MapGenSettingsPath, settings)
 }
 
 func (s *SettingsService) GetAdminList() (models.AdminList, error) {
-	list, err := readJSONSettings[models.AdminList](s.cfg.ServerAdminListPath, "/opt/factorio/data/server-adminlist.example.json")
+	cfg := s.cfgManager.GetConfig()
+	list, err := readJSONSettings[models.AdminList](cfg.Factorio.ServerAdminListPath, "/opt/factorio/data/server-adminlist.example.json")
 	if err != nil {
 		return nil, err
 	}
@@ -123,11 +130,13 @@ func (s *SettingsService) UpdateAdminList(list models.AdminList) error {
 	if list == nil {
 		list = models.AdminList{}
 	}
-	return writeJSONSettings(s.cfg.ServerAdminListPath, list)
+	cfg := s.cfgManager.GetConfig()
+	return writeJSONSettings(cfg.Factorio.ServerAdminListPath, list)
 }
 
 func (s *SettingsService) GetWhitelist() (models.Whitelist, error) {
-	list, err := readJSONSettings[models.Whitelist](s.cfg.ServerWhiteListPath, "/opt/factorio/data/server-whitelist.example.json")
+	cfg := s.cfgManager.GetConfig()
+	list, err := readJSONSettings[models.Whitelist](cfg.Factorio.ServerWhiteListPath, "/opt/factorio/data/server-whitelist.example.json")
 	if err != nil {
 		return nil, err
 	}
@@ -141,11 +150,13 @@ func (s *SettingsService) UpdateWhitelist(list models.Whitelist) error {
 	if list == nil {
 		list = models.Whitelist{}
 	}
-	return writeJSONSettings(s.cfg.ServerWhiteListPath, list)
+	cfg := s.cfgManager.GetConfig()
+	return writeJSONSettings(cfg.Factorio.ServerWhiteListPath, list)
 }
 
 func (s *SettingsService) GetBanList() (models.BanList, error) {
-	list, err := readJSONSettings[models.BanList](s.cfg.ServerBanListPath, "/opt/factorio/data/server-banlist.example.json")
+	cfg := s.cfgManager.GetConfig()
+	list, err := readJSONSettings[models.BanList](cfg.Factorio.ServerBanListPath, "/opt/factorio/data/server-banlist.example.json")
 	if err != nil {
 		return nil, err
 	}
@@ -159,5 +170,6 @@ func (s *SettingsService) UpdateBanList(list models.BanList) error {
 	if list == nil {
 		list = models.BanList{}
 	}
-	return writeJSONSettings(s.cfg.ServerBanListPath, list)
+	cfg := s.cfgManager.GetConfig()
+	return writeJSONSettings(cfg.Factorio.ServerBanListPath, list)
 }
