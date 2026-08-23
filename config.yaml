@@ -1,3 +1,5 @@
+auth:
+  api_key: ""
 factorio:
   executable_path: "/opt/factorio/bin/x64/factorio"
   save_path: "/factorio/data/saves/my-world.zip"

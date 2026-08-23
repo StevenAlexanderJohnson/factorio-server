@@ -27,11 +27,11 @@ RUN mkdir -p /opt /factorio/data/saves /app
 
 # Copy the compiled application and default configuration
 COPY --from=builder /bin/factorio-api /app/factorio-api
-COPY config.yaml /app/config.yaml
+COPY config.yaml /factorio/data/config.yaml
 
 # Expose Factorio default game port (UDP) and HTTP API port
 EXPOSE 34197/udp
 EXPOSE 8080
 
 ENTRYPOINT ["/app/factorio-api"]
-CMD ["-config", "/app/config.yaml"]
+CMD ["-config", "/factorio/data/config.yaml"]

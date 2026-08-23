@@ -5,6 +5,7 @@ import (
 	"factorio/internal/config"
 	"factorio/internal/controllers"
 	"factorio/internal/factorio"
+	"factorio/internal/middleware"
 	"factorio/internal/services"
 	"flag"
 	"net/http"
@@ -57,6 +58,7 @@ func main() {
 
 	scope := grove.
 		NewScope("main").
+		WithMiddleware(middleware.NewAuthMiddleware(cfg.Auth)).
 		WithRoute("/healthz", http.HandlerFunc(
 			func(w http.ResponseWriter, r *http.Request) {
 				w.Write([]byte("healthy"))

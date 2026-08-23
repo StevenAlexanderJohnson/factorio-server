@@ -1,15 +1,23 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"time"
 
+	"github.com/StevenAlexanderJohnson/grove"
 	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
+	Auth     Auth           `yaml:"auth"`
 	Factorio FactorioConfig `yaml:"factorio"`
+}
+
+type Auth struct {
+	ApiKey string `yaml:"api_key"`
 }
 
 type FactorioConfig struct {
@@ -33,6 +41,9 @@ type FactorioConfig struct {
 
 func DefaultConfig() *Config {
 	return &Config{
+		Auth: Auth{
+			ApiKey: "",
+		},
 		Factorio: FactorioConfig{
 			ExecutablePath:      "/opt/factorio/bin/x64/factorio",
 			SavePath:            "/factorio/data/saves/my-world.zip",
@@ -51,14 +62,23 @@ func DefaultConfig() *Config {
 	}
 }
 
+func createDefaultApiKey() (string, error) {
+	apiKeyBytes := make([]byte, 32)
+	if _, err := rand.Read(apiKeyBytes); err != nil {
+		return "", fmt.Errorf("an error occurred while generating a default api key: %w", err)
+	}
+	apiKey := base64.StdEncoding.EncodeToString(apiKeyBytes)
+	return apiKey, nil
+}
+
 // LoadConfig loads configuration from a YAML file.
-// If path is empty, it checks the CONFIG_PATH env var, or defaults to "config.yaml".
+// If path is empty, it checks the CONFIG_PATH env var, or defaults to "/factorio/data/config.yaml".
 func LoadConfig(path string) (*Config, error) {
 	if path == "" {
 		if envPath := os.Getenv("CONFIG_PATH"); envPath != "" {
 			path = envPath
 		} else {
-			path = "config.yaml"
+			path = "/factorio/data/config.yaml"
 		}
 	}
 
@@ -71,6 +91,23 @@ func LoadConfig(path string) (*Config, error) {
 
 	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse yaml config: %w", err)
+	}
+
+	if cfg.Auth.ApiKey == "" {
+		defaultApiKey, err := createDefaultApiKey()
+		if err != nil {
+			return nil, err
+		}
+		cfg.Auth.ApiKey = defaultApiKey
+		cfgBytes, err := yaml.Marshal(cfg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal config after applying default api key: %w", err)
+		}
+		if err := os.WriteFile(path, cfgBytes, os.FileMode(os.O_TRUNC|os.O_WRONLY)); err != nil {
+			return nil, fmt.Errorf("failed to write config back to file after applying default api key: %w", err)
+		}
+		logger := grove.NewDefaultLogger("Config")
+		logger.Infof("The API Key was empty in the configuration file. A new one was generated and written to the config file.")
 	}
 
 	return cfg, nil
