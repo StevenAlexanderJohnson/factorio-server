@@ -56,6 +56,8 @@ func main() {
 
 	settingsService := services.NewSettingsService(cfg.Factorio)
 
+	commandService := services.NewCommandService(factorioService)
+
 	scope := grove.
 		NewScope("main").
 		WithMiddleware(middleware.NewAuthMiddleware(cfg.Auth)).
@@ -64,8 +66,9 @@ func main() {
 				w.Write([]byte("healthy"))
 			}),
 		).
-		WithController(controllers.NewFactorioController(factorioService)).
-		WithController(controllers.NewSettingsController(settingsService))
+		WithController(controllers.NewFactorioController(logger, factorioService)).
+		WithController(controllers.NewSettingsController(logger, settingsService)).
+		WithController(controllers.NewCommandController(logger, commandService))
 
 	app := grove.NewApp("factorio").WithScope("/", scope)
 

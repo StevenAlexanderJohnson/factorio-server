@@ -17,10 +17,11 @@ import (
 )
 
 var (
-	ErrFactorioServerError  = errors.New("an error occurred with the Factorio server")
-	ErrServerAlreadyRunning = errors.New("the factorio server is already running")
-	ErrServerAlreadyStopped = errors.New("the factorio server is already stopped")
-	ErrShutdownTimeout      = errors.New("the factorio server shutdown timed out and was forcefully killed")
+	ErrFactorioServerNotRunning = errors.New("unable to complete the request because the factorio server isn't running")
+	ErrFactorioServerError      = errors.New("an error occurred with the Factorio server")
+	ErrServerAlreadyRunning     = errors.New("the factorio server is already running")
+	ErrServerAlreadyStopped     = errors.New("the factorio server is already stopped")
+	ErrShutdownTimeout          = errors.New("the factorio server shutdown timed out and was forcefully killed")
 )
 
 type FactorioMessageType int

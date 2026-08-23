@@ -10,6 +10,8 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+
+	"github.com/StevenAlexanderJohnson/grove"
 )
 
 func TestSettingsController(t *testing.T) {
@@ -24,8 +26,9 @@ func TestSettingsController(t *testing.T) {
 		ServerBanListPath:   filepath.Join(tempDir, "server-banlist.json"),
 	}
 
+	logger := grove.NewDefaultLogger("TestSettingsController")
 	settingsSrv := services.NewSettingsService(cfg)
-	ctrl := NewSettingsController(settingsSrv)
+	ctrl := NewSettingsController(logger, settingsSrv)
 
 	mux := http.NewServeMux()
 	ctrl.RegisterRoutes(mux)
