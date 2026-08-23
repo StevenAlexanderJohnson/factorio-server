@@ -30,7 +30,7 @@ func TestFactorioService_StoppedState(t *testing.T) {
 		t.Fatalf("expected ErrServerAlreadyStopped when stopping a stopped server, got: %v", err)
 	}
 
-	err = srv.SendCommand("/help")
+	_, err = srv.SendCommand("/help")
 	if !errors.Is(err, ErrServerAlreadyStopped) {
 		t.Fatalf("expected ErrServerAlreadyStopped when sending command to stopped server, got: %v", err)
 	}
@@ -44,7 +44,7 @@ func TestFactorioManager_LockConcurrency(t *testing.T) {
 		go func() {
 			for j := 0; j < 100; j++ {
 				_ = mgr.IsRunning()
-				_ = mgr.SendCommand("test")
+				_, _ = mgr.SendCommand("test")
 			}
 			done <- true
 		}()

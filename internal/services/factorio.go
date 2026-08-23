@@ -5,6 +5,7 @@ import (
 	"errors"
 	"factorio/internal/config"
 	"factorio/internal/factorio"
+	"factorio/internal/rcon"
 	"fmt"
 	"io"
 	"os"
@@ -17,10 +18,11 @@ import (
 )
 
 var (
-	ErrFactorioServerError  = errors.New("an error occurred with the Factorio server")
-	ErrServerAlreadyRunning = errors.New("the factorio server is already running")
-	ErrServerAlreadyStopped = errors.New("the factorio server is already stopped")
-	ErrShutdownTimeout      = errors.New("the factorio server shutdown timed out and was forcefully killed")
+	ErrFactorioServerNotRunning = errors.New("unable to complete the request because the factorio server isn't running")
+	ErrFactorioServerError      = errors.New("an error occurred with the Factorio server")
+	ErrServerAlreadyRunning     = errors.New("the factorio server is already running")
+	ErrServerAlreadyStopped     = errors.New("the factorio server is already stopped")
+	ErrShutdownTimeout          = errors.New("the factorio server shutdown timed out and was forcefully killed")
 )
 
 type FactorioMessageType int
@@ -39,6 +41,7 @@ type FactorioMessage struct {
 type factorioManager struct {
 	ctx    context.Context
 	logger grove.ILogger
+	cfg    config.FactorioConfig
 
 	// Used for managing the factorio server executable
 	lock sync.Mutex
@@ -59,19 +62,34 @@ func (f *factorioManager) IsRunning() bool {
 	return f.cmd != nil
 }
 
-func (f *factorioManager) SendCommand(cmd string) error {
+func (f *factorioManager) SendCommand(cmd string) (string, error) {
 	f.lock.Lock()
+	c := f.cmd
 	stdin := f.stdin
+	cfg := f.cfg
 	f.lock.Unlock()
 
+	if c == nil {
+		return "", ErrServerAlreadyStopped
+	}
+
+	if cfg.RCONPort > 0 && cfg.RCONPassword != "" {
+		addr := fmt.Sprintf("127.0.0.1:%d", cfg.RCONPort)
+		resp, err := rcon.ExecuteCommand(addr, cfg.RCONPassword, cmd)
+		if err == nil {
+			return resp, nil
+		}
+		f.logger.Errorf("RCON command failed: %v, falling back to stdin", err)
+	}
+
 	if stdin == nil {
-		return ErrServerAlreadyStopped
+		return "", ErrServerAlreadyStopped
 	}
 
 	if _, err := io.WriteString(stdin, cmd+"\n"); err != nil {
-		return fmt.Errorf("%w: failed to send command: %v", ErrFactorioServerError, err)
+		return "", fmt.Errorf("%w: failed to send command: %v", ErrFactorioServerError, err)
 	}
-	return nil
+	return "", nil
 }
 
 func (f *factorioManager) setServerState(c *exec.Cmd, stdin io.WriteCloser, doneChan chan error) {
@@ -144,6 +162,12 @@ func (f *factorioManager) startFactorioLoop(cfg config.FactorioConfig) {
 						if _, err := os.Stat(cfg.ServerWhiteListPath); err == nil {
 							args = append(args, "--server-whitelist", cfg.ServerWhiteListPath)
 						}
+					}
+				}
+				if cfg.RCONPort > 0 {
+					args = append(args, "--rcon-port", fmt.Sprintf("%d", cfg.RCONPort))
+					if cfg.RCONPassword != "" {
+						args = append(args, "--rcon-password", cfg.RCONPassword)
 					}
 				}
 
@@ -313,6 +337,7 @@ func NewFactorioService(ctx context.Context, logger grove.ILogger, cfg config.Fa
 	factorioManager := &factorioManager{
 		logger:    logger,
 		ctx:       ctx,
+		cfg:       cfg,
 		msgChan:   msgChan,
 		fatalChan: fatalChan,
 	}

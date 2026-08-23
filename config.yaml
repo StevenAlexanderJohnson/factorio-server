@@ -11,5 +11,7 @@ factorio:
   # use_server_whitelist: false
   # start_server_on_startup: false
   shutdown_timeout: 1m
+  rcon_port: 27015
+  rcon_password: ""
   # download_url: "https://factorio.com/get-download/stable/headless/linux64"
 
