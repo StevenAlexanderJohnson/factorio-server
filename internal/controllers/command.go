@@ -36,7 +36,8 @@ func (c *CommandController) handleCommand(w http.ResponseWriter, r *http.Request
 		return
 	}
 	c.logger.Infof("Sending command to Factorio server: %s", body.Command)
-	if err := c.commandService.SendCommand(body.Command); err != nil {
+	resp, err := c.commandService.SendCommand(body.Command)
+	if err != nil {
 		if errors.Is(err, services.ErrFactorioServerNotRunning) {
 			c.logger.Warningf("A request was received to send a command while the server was not running: %q", body.Command)
 			grove.WriteErrorToResponse(w, http.StatusUnprocessableEntity, "The server is not online.")
@@ -47,4 +48,5 @@ func (c *CommandController) handleCommand(w http.ResponseWriter, r *http.Request
 		return
 	}
 	c.logger.Infof("Command sent successfully: %s", body.Command)
+	_ = grove.WriteJsonBodyToResponse(w, models.CommandResponse{Response: resp})
 }

@@ -37,6 +37,8 @@ type FactorioConfig struct {
 	ExtractDir           string        `yaml:"extract_dir,omitempty"`
 	TempArchivePath      string        `yaml:"temp_archive_path,omitempty"`
 	AutoDownloadOnStart  bool          `yaml:"auto_download_on_start"`
+	RCONPort             int           `yaml:"rcon_port,omitempty"`
+	RCONPassword         string        `yaml:"rcon_password,omitempty"`
 }
 
 func DefaultConfig() *Config {
@@ -58,6 +60,8 @@ func DefaultConfig() *Config {
 			TempArchivePath:     "/tmp/factorio.tar.xz",
 			ShutdownTimeout:     1 * time.Minute,
 			AutoDownloadOnStart: true,
+			RCONPort:            27015,
+			RCONPassword:        "",
 		},
 	}
 }
@@ -93,21 +97,38 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse yaml config: %w", err)
 	}
 
+	updatedConfig := false
+
 	if cfg.Auth.ApiKey == "" {
 		defaultApiKey, err := createDefaultApiKey()
 		if err != nil {
 			return nil, err
 		}
 		cfg.Auth.ApiKey = defaultApiKey
-		cfgBytes, err := yaml.Marshal(cfg)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal config after applying default api key: %w", err)
-		}
-		if err := os.WriteFile(path, cfgBytes, os.FileMode(os.O_TRUNC|os.O_WRONLY)); err != nil {
-			return nil, fmt.Errorf("failed to write config back to file after applying default api key: %w", err)
-		}
+		updatedConfig = true
 		logger := grove.NewDefaultLogger("Config")
 		logger.Infof("The API Key was empty in the configuration file. A new one was generated and written to the config file.")
+	}
+
+	if cfg.Factorio.RCONPort > 0 && cfg.Factorio.RCONPassword == "" {
+		rconPass, err := createDefaultApiKey()
+		if err != nil {
+			return nil, err
+		}
+		cfg.Factorio.RCONPassword = rconPass
+		updatedConfig = true
+		logger := grove.NewDefaultLogger("Config")
+		logger.Infof("The RCON password was empty in the configuration file. A new one was generated and written to the config file.")
+	}
+
+	if updatedConfig {
+		cfgBytes, err := yaml.Marshal(cfg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal config after generating defaults: %w", err)
+		}
+		if err := os.WriteFile(path, cfgBytes, os.FileMode(os.O_TRUNC|os.O_WRONLY)); err != nil {
+			return nil, fmt.Errorf("failed to write config back to file after generating defaults: %w", err)
+		}
 	}
 
 	return cfg, nil

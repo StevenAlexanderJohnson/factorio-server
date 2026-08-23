@@ -10,9 +10,9 @@ func NewCommandService(factorioService *FactorioService) *CommandService {
 	}
 }
 
-func (r *CommandService) SendCommand(cmd string) error {
+func (r *CommandService) SendCommand(cmd string) (string, error) {
 	if !r.factorioService.IsRunning() {
-		return ErrFactorioServerNotRunning
+		return "", ErrFactorioServerNotRunning
 	}
 	return r.factorioService.SendCommand(cmd)
 }
