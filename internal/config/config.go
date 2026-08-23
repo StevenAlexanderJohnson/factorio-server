@@ -1,14 +1,7 @@
 package config
 
 import (
-	"crypto/rand"
-	"encoding/base64"
-	"fmt"
-	"os"
 	"time"
-
-	"github.com/StevenAlexanderJohnson/grove"
-	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
@@ -64,72 +57,4 @@ func DefaultConfig() *Config {
 			RCONPassword:        "",
 		},
 	}
-}
-
-func createDefaultApiKey() (string, error) {
-	apiKeyBytes := make([]byte, 32)
-	if _, err := rand.Read(apiKeyBytes); err != nil {
-		return "", fmt.Errorf("an error occurred while generating a default api key: %w", err)
-	}
-	apiKey := base64.StdEncoding.EncodeToString(apiKeyBytes)
-	return apiKey, nil
-}
-
-// LoadConfig loads configuration from a YAML file.
-// If path is empty, it checks the CONFIG_PATH env var, or defaults to "/factorio/data/config.yaml".
-func LoadConfig(path string) (*Config, error) {
-	if path == "" {
-		if envPath := os.Getenv("CONFIG_PATH"); envPath != "" {
-			path = envPath
-		} else {
-			path = "/factorio/data/config.yaml"
-		}
-	}
-
-	cfg := DefaultConfig()
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config file at %q: %w", path, err)
-	}
-
-	if err := yaml.Unmarshal(data, cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse yaml config: %w", err)
-	}
-
-	updatedConfig := false
-
-	if cfg.Auth.ApiKey == "" {
-		defaultApiKey, err := createDefaultApiKey()
-		if err != nil {
-			return nil, err
-		}
-		cfg.Auth.ApiKey = defaultApiKey
-		updatedConfig = true
-		logger := grove.NewDefaultLogger("Config")
-		logger.Infof("The API Key was empty in the configuration file. A new one was generated and written to the config file.")
-	}
-
-	if cfg.Factorio.RCONPort > 0 && cfg.Factorio.RCONPassword == "" {
-		rconPass, err := createDefaultApiKey()
-		if err != nil {
-			return nil, err
-		}
-		cfg.Factorio.RCONPassword = rconPass
-		updatedConfig = true
-		logger := grove.NewDefaultLogger("Config")
-		logger.Infof("The RCON password was empty in the configuration file. A new one was generated and written to the config file.")
-	}
-
-	if updatedConfig {
-		cfgBytes, err := yaml.Marshal(cfg)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal config after generating defaults: %w", err)
-		}
-		if err := os.WriteFile(path, cfgBytes, os.FileMode(os.O_TRUNC|os.O_WRONLY)); err != nil {
-			return nil, fmt.Errorf("failed to write config back to file after generating defaults: %w", err)
-		}
-	}
-
-	return cfg, nil
 }

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"factorio/internal/config"
+	"os"
+	"path/filepath"
 	"testing"
 
 	grove "github.com/StevenAlexanderJohnson/grove"
@@ -13,10 +15,18 @@ func TestFactorioService_StoppedState(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	logger := grove.NewDefaultLogger("TestServer")
-	cfg := config.FactorioConfig{}
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.yaml")
+	_ = os.WriteFile(configPath, []byte("auth:\n  api_key: test\n"), 0644)
 
-	srv, err := NewFactorioService(ctx, logger, cfg)
+	cfgManager, err := config.NewConfigManager(configPath)
+	if err != nil {
+		t.Fatalf("failed to create config manager: %v", err)
+	}
+
+	logger := grove.NewDefaultLogger("TestServer")
+
+	srv, err := NewFactorioService(ctx, logger, cfgManager)
 	if err != nil {
 		t.Fatalf("failed to create factorio service: %v", err)
 	}
@@ -37,7 +47,14 @@ func TestFactorioService_StoppedState(t *testing.T) {
 }
 
 func TestFactorioManager_LockConcurrency(t *testing.T) {
-	mgr := &factorioManager{}
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.yaml")
+	_ = os.WriteFile(configPath, []byte("auth:\n  api_key: test\n"), 0644)
+	cfgManager, _ := config.NewConfigManager(configPath)
+
+	mgr := &factorioManager{
+		cfgManager: cfgManager,
+	}
 
 	done := make(chan bool)
 	for i := 0; i < 10; i++ {

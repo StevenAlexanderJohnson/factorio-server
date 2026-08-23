@@ -39,9 +39,9 @@ type FactorioMessage struct {
 }
 
 type factorioManager struct {
-	ctx    context.Context
-	logger grove.ILogger
-	cfg    config.FactorioConfig
+	ctx        context.Context
+	logger     grove.ILogger
+	cfgManager *config.ConfigManager
 
 	// Used for managing the factorio server executable
 	lock sync.Mutex
@@ -66,7 +66,7 @@ func (f *factorioManager) SendCommand(cmd string) (string, error) {
 	f.lock.Lock()
 	c := f.cmd
 	stdin := f.stdin
-	cfg := f.cfg
+	cfg := f.cfgManager.GetConfig().Factorio
 	f.lock.Unlock()
 
 	if c == nil {
@@ -114,7 +114,7 @@ func (f *factorioManager) getServerState() (*exec.Cmd, io.WriteCloser, chan erro
 	return f.cmd, f.stdin, f.doneChan
 }
 
-func (f *factorioManager) startFactorioLoop(cfg config.FactorioConfig) {
+func (f *factorioManager) startFactorioLoop(cfgManager *config.ConfigManager) {
 	for {
 		_, _, currentDoneChan := f.getServerState()
 
@@ -129,45 +129,46 @@ func (f *factorioManager) startFactorioLoop(cfg config.FactorioConfig) {
 					continue
 				}
 
-				execPath := cfg.ExecutablePath
+				cfg := cfgManager.GetConfig()
+				execPath := cfg.Factorio.ExecutablePath
 				if execPath == "" {
 					execPath = "/opt/factorio/bin/x64/factorio"
 				}
 
-				if err := f.ensureSaveFile(execPath, cfg.SavePath); err != nil {
+				if err := f.ensureSaveFile(execPath, cfg.Factorio.SavePath); err != nil {
 					f.logger.Errorf("Failed to ensure save file: %v", err)
 					msg.Reply <- fmt.Errorf("%w: failed to ensure save file: %v", ErrFactorioServerError, err)
 					continue
 				}
 
-				args := []string{"--start-server", cfg.SavePath}
-				if cfg.ServerSettingsPath != "" {
-					if _, err := os.Stat(cfg.ServerSettingsPath); err == nil {
-						args = append(args, "--server-settings", cfg.ServerSettingsPath)
+				args := []string{"--start-server", cfg.Factorio.SavePath}
+				if cfg.Factorio.ServerSettingsPath != "" {
+					if _, err := os.Stat(cfg.Factorio.ServerSettingsPath); err == nil {
+						args = append(args, "--server-settings", cfg.Factorio.ServerSettingsPath)
 					}
 				}
-				if cfg.ServerAdminListPath != "" {
-					if _, err := os.Stat(cfg.ServerAdminListPath); err == nil {
-						args = append(args, "--server-adminlist", cfg.ServerAdminListPath)
+				if cfg.Factorio.ServerAdminListPath != "" {
+					if _, err := os.Stat(cfg.Factorio.ServerAdminListPath); err == nil {
+						args = append(args, "--server-adminlist", cfg.Factorio.ServerAdminListPath)
 					}
 				}
-				if cfg.ServerBanListPath != "" {
-					if _, err := os.Stat(cfg.ServerBanListPath); err == nil {
-						args = append(args, "--server-banlist", cfg.ServerBanListPath)
+				if cfg.Factorio.ServerBanListPath != "" {
+					if _, err := os.Stat(cfg.Factorio.ServerBanListPath); err == nil {
+						args = append(args, "--server-banlist", cfg.Factorio.ServerBanListPath)
 					}
 				}
-				if cfg.UseServerWhitelist {
+				if cfg.Factorio.UseServerWhitelist {
 					args = append(args, "--use-server-whitelist")
-					if cfg.ServerWhiteListPath != "" {
-						if _, err := os.Stat(cfg.ServerWhiteListPath); err == nil {
-							args = append(args, "--server-whitelist", cfg.ServerWhiteListPath)
+					if cfg.Factorio.ServerWhiteListPath != "" {
+						if _, err := os.Stat(cfg.Factorio.ServerWhiteListPath); err == nil {
+							args = append(args, "--server-whitelist", cfg.Factorio.ServerWhiteListPath)
 						}
 					}
 				}
-				if cfg.RCONPort > 0 {
-					args = append(args, "--rcon-port", fmt.Sprintf("%d", cfg.RCONPort))
-					if cfg.RCONPassword != "" {
-						args = append(args, "--rcon-password", cfg.RCONPassword)
+				if cfg.Factorio.RCONPort > 0 {
+					args = append(args, "--rcon-port", fmt.Sprintf("%d", cfg.Factorio.RCONPort))
+					if cfg.Factorio.RCONPassword != "" {
+						args = append(args, "--rcon-password", cfg.Factorio.RCONPassword)
 					}
 				}
 
@@ -206,6 +207,7 @@ func (f *factorioManager) startFactorioLoop(cfg config.FactorioConfig) {
 					continue
 				}
 
+				cfg := cfgManager.GetConfig().Factorio
 				timeout := cfg.ShutdownTimeout
 				if timeout <= 0 {
 					timeout = 1 * time.Minute
@@ -222,7 +224,7 @@ func (f *factorioManager) startFactorioLoop(cfg config.FactorioConfig) {
 				msg.Reply <- err
 
 			case FactorioUpdate:
-				updated, version, err := factorio.EnsureUpdated(f.ctx, cfg, f.logger)
+				updated, version, err := factorio.EnsureUpdated(f.ctx, f.cfgManager.GetConfig().Factorio, f.logger)
 				if err != nil {
 					f.logger.Errorf("Failed to update Factorio server: %v", err)
 					msg.Reply <- fmt.Errorf("%w: failed to update server: %v", ErrFactorioServerError, err)
@@ -244,6 +246,7 @@ func (f *factorioManager) startFactorioLoop(cfg config.FactorioConfig) {
 		case <-f.ctx.Done():
 			f.logger.Warning("Received cancellation signal. Shutting down Factorio actor loop...")
 			if f.IsRunning() {
+				cfg := cfgManager.GetConfig().Factorio
 				timeout := cfg.ShutdownTimeout
 				if timeout <= 0 {
 					timeout = 1 * time.Minute
@@ -330,20 +333,20 @@ type FactorioService struct {
 	fatalChan <-chan error
 }
 
-func NewFactorioService(ctx context.Context, logger grove.ILogger, cfg config.FactorioConfig) (*FactorioService, error) {
+func NewFactorioService(ctx context.Context, logger grove.ILogger, cfgManager *config.ConfigManager) (*FactorioService, error) {
 	msgChan := make(chan FactorioMessage, 1)
 	fatalChan := make(chan error, 1)
 
 	factorioManager := &factorioManager{
-		logger:    logger,
-		ctx:       ctx,
-		cfg:       cfg,
-		msgChan:   msgChan,
-		fatalChan: fatalChan,
+		logger:     logger,
+		ctx:        ctx,
+		cfgManager: cfgManager,
+		msgChan:    msgChan,
+		fatalChan:  fatalChan,
 	}
-	go factorioManager.startFactorioLoop(cfg)
+	go factorioManager.startFactorioLoop(cfgManager)
 
-	if cfg.StartServerOnStartup {
+	if cfgManager.GetConfig().Factorio.StartServerOnStartup {
 		reply := make(chan error, 1)
 		msgChan <- FactorioMessage{
 			Type:  FactorioStart,

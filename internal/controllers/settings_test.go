@@ -6,8 +6,10 @@ import (
 	"factorio/internal/config"
 	"factorio/internal/factorio/models"
 	"factorio/internal/services"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -16,18 +18,33 @@ import (
 
 func TestSettingsController(t *testing.T) {
 	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.yaml")
 
-	cfg := config.FactorioConfig{
-		ServerSettingsPath:  filepath.Join(tempDir, "server-settings.json"),
-		MapSettingsPath:     filepath.Join(tempDir, "map-settings.json"),
-		MapGenSettingsPath:  filepath.Join(tempDir, "map-gen-settings.json"),
-		ServerAdminListPath: filepath.Join(tempDir, "server-adminlist.json"),
-		ServerWhiteListPath: filepath.Join(tempDir, "server-whitelist.json"),
-		ServerBanListPath:   filepath.Join(tempDir, "server-banlist.json"),
+	cfgYAML := fmt.Sprintf(`
+factorio:
+  server_settings_path: %q
+  map_settings_path: %q
+  map_gen_settings_path: %q
+  server_adminlist_path: %q
+  server_whitelist_path: %q
+  server_banlist_path: %q
+`,
+		filepath.Join(tempDir, "server-settings.json"),
+		filepath.Join(tempDir, "map-settings.json"),
+		filepath.Join(tempDir, "map-gen-settings.json"),
+		filepath.Join(tempDir, "server-adminlist.json"),
+		filepath.Join(tempDir, "server-whitelist.json"),
+		filepath.Join(tempDir, "server-banlist.json"),
+	)
+	_ = os.WriteFile(configPath, []byte(cfgYAML), 0644)
+
+	cfgManager, err := config.NewConfigManager(configPath)
+	if err != nil {
+		t.Fatalf("failed to create config manager: %v", err)
 	}
 
 	logger := grove.NewDefaultLogger("TestSettingsController")
-	settingsSrv := services.NewSettingsService(cfg)
+	settingsSrv := services.NewSettingsService(cfgManager)
 	ctrl := NewSettingsController(logger, settingsSrv)
 
 	mux := http.NewServeMux()

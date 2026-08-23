@@ -3,23 +3,40 @@ package services
 import (
 	"factorio/internal/config"
 	"factorio/internal/factorio/models"
+	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 )
 
 func TestSettingsService_Lifecycle(t *testing.T) {
 	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.yaml")
 
-	cfg := config.FactorioConfig{
-		ServerSettingsPath:  filepath.Join(tempDir, "server-settings.json"),
-		MapSettingsPath:     filepath.Join(tempDir, "map-settings.json"),
-		MapGenSettingsPath:  filepath.Join(tempDir, "map-gen-settings.json"),
-		ServerAdminListPath: filepath.Join(tempDir, "server-adminlist.json"),
-		ServerWhiteListPath: filepath.Join(tempDir, "server-whitelist.json"),
-		ServerBanListPath:   filepath.Join(tempDir, "server-banlist.json"),
+	cfgYAML := fmt.Sprintf(`
+factorio:
+  server_settings_path: %q
+  map_settings_path: %q
+  map_gen_settings_path: %q
+  server_adminlist_path: %q
+  server_whitelist_path: %q
+  server_banlist_path: %q
+`,
+		filepath.Join(tempDir, "server-settings.json"),
+		filepath.Join(tempDir, "map-settings.json"),
+		filepath.Join(tempDir, "map-gen-settings.json"),
+		filepath.Join(tempDir, "server-adminlist.json"),
+		filepath.Join(tempDir, "server-whitelist.json"),
+		filepath.Join(tempDir, "server-banlist.json"),
+	)
+	_ = os.WriteFile(configPath, []byte(cfgYAML), 0644)
+
+	cfgManager, err := config.NewConfigManager(configPath)
+	if err != nil {
+		t.Fatalf("failed to create config manager: %v", err)
 	}
 
-	srv := NewSettingsService(cfg)
+	srv := NewSettingsService(cfgManager)
 
 	// Test ServerSettings
 	srvSettings := models.ServerSettings{Name: "Test Server"}
@@ -102,14 +119,26 @@ func TestSettingsService_Lifecycle(t *testing.T) {
 
 func TestSettingsService_UninitializedListsReturnEmptyArray(t *testing.T) {
 	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.yaml")
 
-	cfg := config.FactorioConfig{
-		ServerAdminListPath: filepath.Join(tempDir, "nonexistent-adminlist.json"),
-		ServerWhiteListPath: filepath.Join(tempDir, "nonexistent-whitelist.json"),
-		ServerBanListPath:   filepath.Join(tempDir, "nonexistent-banlist.json"),
+	cfgYAML := fmt.Sprintf(`
+factorio:
+  server_adminlist_path: %q
+  server_whitelist_path: %q
+  server_banlist_path: %q
+`,
+		filepath.Join(tempDir, "nonexistent-adminlist.json"),
+		filepath.Join(tempDir, "nonexistent-whitelist.json"),
+		filepath.Join(tempDir, "nonexistent-banlist.json"),
+	)
+	_ = os.WriteFile(configPath, []byte(cfgYAML), 0644)
+
+	cfgManager, err := config.NewConfigManager(configPath)
+	if err != nil {
+		t.Fatalf("failed to create config manager: %v", err)
 	}
 
-	srv := NewSettingsService(cfg)
+	srv := NewSettingsService(cfgManager)
 
 	adminList, err := srv.GetAdminList()
 	if err != nil {

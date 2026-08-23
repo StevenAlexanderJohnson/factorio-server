@@ -7,7 +7,7 @@ import (
 	"github.com/StevenAlexanderJohnson/grove"
 )
 
-func NewAuthMiddleware(cfg config.Auth) grove.Middleware {
+func NewAuthMiddleware(cfgManager *config.ConfigManager) grove.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			apiKeyHeader := r.Header.Get("authorization")
@@ -16,6 +16,7 @@ func NewAuthMiddleware(cfg config.Auth) grove.Middleware {
 				return
 			}
 			apiKey := apiKeyHeader[len("Bearer "):]
+			cfg := cfgManager.GetConfig().Auth
 			if apiKey != cfg.ApiKey {
 				grove.WriteErrorToResponse(w, http.StatusUnauthorized, "Unauthorized")
 				return
