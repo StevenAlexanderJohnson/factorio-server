@@ -1,0 +1,27 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ "v*" ]
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set tag name
+      id: vars
+      run: |
+        if [[ "${{ github.ref_type }}" == "tag" ]]; then
+          echo "TAG=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+        else
+          echo "TAG=nightly" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Build the Docker image
+      run: docker build . --file Dockerfile --tag factorio-server:${{ steps.vars.outputs.TAG }}
