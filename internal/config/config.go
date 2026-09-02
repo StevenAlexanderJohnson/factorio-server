@@ -7,6 +7,11 @@ import (
 type Config struct {
 	Auth     Auth           `yaml:"auth" json:"auth"`
 	Factorio FactorioConfig `yaml:"factorio" json:"factorio"`
+	Logs     LogsConfig     `yaml:"logs" json:"logs"`
+}
+
+type LogsConfig struct {
+	LogParserScript string `yaml:"log_parser_script,omitempty" json:"log_parser_script,omitempty"`
 }
 
 type Auth struct {
@@ -55,6 +60,9 @@ func DefaultConfig() *Config {
 			AutoDownloadOnStart: true,
 			RCONPort:            27015,
 			RCONPassword:        "",
+		},
+		Logs: LogsConfig{
+			LogParserScript: "/factorio/data/log-parser.lua",
 		},
 	}
 }
