@@ -4,7 +4,9 @@ import (
 	"context"
 	"factorio/internal/config"
 	"factorio/internal/controllers"
+	"factorio/internal/events"
 	"factorio/internal/factorio"
+	"factorio/internal/logs"
 	"factorio/internal/middleware"
 	"factorio/internal/services"
 	"flag"
@@ -12,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/StevenAlexanderJohnson/grove"
 )
@@ -42,7 +45,18 @@ func main() {
 		logger.Infof("factorio was up to date on startup")
 	}
 
-	factorioService, err := services.NewFactorioService(ctx, logger, cfgManager)
+	eventBus := events.NewEventBus()
+
+	logScriptPath := cfgManager.GetConfig().Logs.LogParserScript
+	logParser, err := logs.NewLogParser(cfgManager.GetConfig().Logs, eventBus)
+	if err != nil {
+		logger.Warningf("Failed to initialize log parser with script %q: %v", logScriptPath, err)
+	} else {
+		logger.Infof("Loaded Lua log parser script from %s", logScriptPath)
+		logParser.StartWatcher(ctx, 2*time.Second, logger)
+	}
+
+	factorioService, err := services.NewFactorioService(ctx, logger, cfgManager, logParser)
 	if err != nil {
 		logger.Errorf("An error occurred while creating the factorio service: %w\n", err)
 		return
@@ -69,7 +83,8 @@ func main() {
 		WithController(controllers.NewFactorioController(logger, factorioService)).
 		WithController(controllers.NewSettingsController(logger, settingsService)).
 		WithController(controllers.NewCommandController(logger, commandService)).
-		WithController(controllers.NewConfigController(logger, cfgManager))
+		WithController(controllers.NewConfigController(logger, cfgManager)).
+		WithController(controllers.NewSSEController(logger, eventBus))
 
 	app := grove.NewApp("factorio").WithScope("/", scope)
 

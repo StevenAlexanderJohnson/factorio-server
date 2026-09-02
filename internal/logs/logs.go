@@ -1,11 +1,15 @@
 package logs
 
 import (
+	"context"
+	"factorio/internal/config"
 	"factorio/internal/events"
 	"fmt"
 	"os"
 	"sync"
+	"time"
 
+	"github.com/StevenAlexanderJohnson/grove"
 	lua "github.com/yuin/gopher-lua"
 	"github.com/yuin/gopher-lua/parse"
 )
@@ -16,13 +20,14 @@ type luaWorker struct {
 }
 
 type LogParser struct {
-	scriptPath string
+	cfg        config.LogsConfig
 	eventBus   *events.EventBus
 	workerPool sync.Pool
 
-	mutex   sync.RWMutex
-	proto   *lua.FunctionProto
-	version uint64
+	mutex       sync.RWMutex
+	proto       *lua.FunctionProto
+	version     uint64
+	lastModTime time.Time
 }
 
 func compileLua(filePath string) (*lua.FunctionProto, error) {
@@ -41,9 +46,14 @@ func compileLua(filePath string) (*lua.FunctionProto, error) {
 }
 
 func (l *LogParser) Reload() error {
-	newProto, err := compileLua(l.scriptPath)
+	newProto, err := compileLua(l.cfg.LogParserScript)
 	if err != nil {
 		return fmt.Errorf("failed to compile lua script: %w", err)
+	}
+
+	stat, err := os.Stat(l.cfg.LogParserScript)
+	if err != nil {
+		return fmt.Errorf("failed to stat lua script: %w", err)
 	}
 
 	l.mutex.Lock()
@@ -51,14 +61,57 @@ func (l *LogParser) Reload() error {
 
 	l.proto = newProto
 	l.version++
+	l.lastModTime = stat.ModTime()
 
 	return nil
 }
 
-func NewLogParser(scriptPath string, eventBus *events.EventBus) (*LogParser, error) {
+func (l *LogParser) StartWatcher(ctx context.Context, interval time.Duration, logger grove.ILogger) {
+	ticker := time.NewTicker(interval)
+	go func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				stat, err := os.Stat(l.cfg.LogParserScript)
+				if err != nil {
+					continue
+				}
+
+				l.mutex.RLock()
+				lastMod := l.lastModTime
+				l.mutex.RUnlock()
+
+				if !stat.ModTime().Equal(lastMod) {
+					if err := l.Reload(); err != nil {
+						if logger != nil {
+							logger.Errorf("Failed to reload Lua log parser script: %v", err)
+						}
+					} else {
+						if logger != nil {
+							logger.Infof("Successfully reloaded Lua log parser script from %s", l.cfg.LogParserScript)
+						}
+					}
+				}
+			}
+		}
+	}()
+}
+
+func NewLogParser(cfg config.LogsConfig, eventBus *events.EventBus) (*LogParser, error) {
+	if cfg.LogParserScript == "" {
+		return nil, fmt.Errorf("log parser script path is empty")
+	}
+
+	if _, err := os.Stat(cfg.LogParserScript); err != nil {
+		return nil, fmt.Errorf("failed to access log parser script %q: %w", cfg.LogParserScript, err)
+	}
+
 	parser := &LogParser{
-		scriptPath: scriptPath,
-		eventBus:   eventBus,
+		cfg:      cfg,
+		eventBus: eventBus,
 		workerPool: sync.Pool{
 			New: func() any {
 				return &luaWorker{}
