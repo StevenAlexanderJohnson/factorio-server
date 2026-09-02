@@ -1,3 +1,7 @@
 *.db
 /build
 *.log
+
+/factorio/
+
+*.exe

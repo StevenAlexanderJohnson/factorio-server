@@ -26,7 +26,7 @@ func TestFactorioService_StoppedState(t *testing.T) {
 
 	logger := grove.NewDefaultLogger("TestServer")
 
-	srv, err := NewFactorioService(ctx, logger, cfgManager)
+	srv, err := NewFactorioService(ctx, logger, cfgManager, nil)
 	if err != nil {
 		t.Fatalf("failed to create factorio service: %v", err)
 	}

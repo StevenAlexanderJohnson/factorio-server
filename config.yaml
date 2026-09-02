@@ -14,4 +14,6 @@ factorio:
   rcon_port: 27015
   rcon_password: ""
   # download_url: "https://factorio.com/get-download/stable/headless/linux64"
+logs:
+  log_parser_script: "/factorio/data/log-parser.lua"
 

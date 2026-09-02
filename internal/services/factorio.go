@@ -1,10 +1,12 @@
 package services
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"factorio/internal/config"
 	"factorio/internal/factorio"
+	"factorio/internal/logs"
 	"factorio/internal/rcon"
 	"fmt"
 	"io"
@@ -42,6 +44,7 @@ type factorioManager struct {
 	ctx        context.Context
 	logger     grove.ILogger
 	cfgManager *config.ConfigManager
+	logParser  *logs.LogParser
 
 	// Used for managing the factorio server executable
 	lock sync.Mutex
@@ -173,8 +176,18 @@ func (f *factorioManager) startFactorioLoop(cfgManager *config.ConfigManager) {
 				}
 
 				c := exec.Command(execPath, args...)
-				c.Stdout = os.Stdout
-				c.Stderr = os.Stderr
+
+				pStdout, err := c.StdoutPipe()
+				if err != nil {
+					msg.Reply <- fmt.Errorf("%w: failed to get stdout pipe: %v", ErrFactorioServerError, err)
+					continue
+				}
+
+				pStderr, err := c.StderrPipe()
+				if err != nil {
+					msg.Reply <- fmt.Errorf("%w: failed to get stderr pipe: %v", ErrFactorioServerError, err)
+					continue
+				}
 
 				pStdin, err := c.StdinPipe()
 				if err != nil {
@@ -186,6 +199,9 @@ func (f *factorioManager) startFactorioLoop(cfgManager *config.ConfigManager) {
 					msg.Reply <- fmt.Errorf("%w: failed to start process: %v", ErrFactorioServerError, err)
 					continue
 				}
+
+				go f.scanPipe(pStdout, os.Stdout)
+				go f.scanPipe(pStderr, os.Stderr)
 
 				doneChan := make(chan error, 1)
 
@@ -326,6 +342,22 @@ func (f *factorioManager) ensureSaveFile(execPath string, savePath string) error
 	return nil
 }
 
+func (f *factorioManager) scanPipe(r io.Reader, out io.Writer) {
+	tee := io.TeeReader(r, out)
+	scanner := bufio.NewScanner(tee)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if f.logParser != nil {
+			if err := f.logParser.ParseLine(line); err != nil {
+				f.logger.Warningf("Failed to parse log line: %v", err)
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		f.logger.Errorf("an error occurred while scanning: %w", err)
+	}
+}
+
 type FactorioService struct {
 	*factorioManager
 
@@ -333,7 +365,7 @@ type FactorioService struct {
 	fatalChan <-chan error
 }
 
-func NewFactorioService(ctx context.Context, logger grove.ILogger, cfgManager *config.ConfigManager) (*FactorioService, error) {
+func NewFactorioService(ctx context.Context, logger grove.ILogger, cfgManager *config.ConfigManager, logParser *logs.LogParser) (*FactorioService, error) {
 	msgChan := make(chan FactorioMessage, 1)
 	fatalChan := make(chan error, 1)
 
@@ -341,6 +373,7 @@ func NewFactorioService(ctx context.Context, logger grove.ILogger, cfgManager *c
 		logger:     logger,
 		ctx:        ctx,
 		cfgManager: cfgManager,
+		logParser:  logParser,
 		msgChan:    msgChan,
 		fatalChan:  fatalChan,
 	}
